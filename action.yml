@@ -99,6 +99,14 @@ runs:
         fi
         echo "prompt-files=${FILES}" >> "$GITHUB_OUTPUT"
 
+    - name: Restore agent memory
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ github.workspace }}/.cache/release-notes-memory.db
+        key: release-notes-memory-${{ github.repository }}-${{ github.run_id }}
+        restore-keys: |
+          release-notes-memory-${{ github.repository }}-
+
     - name: Run cagent
       id: run-agent
       uses: docker/cagent-action@latest
@@ -121,3 +129,11 @@ runs:
         model: ${{ inputs.model }}
         cagent-version: ${{ inputs.cagent-version }}
         yolo: true
+
+    - name: Save agent memory
+      if: always()
+      continue-on-error: true
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ github.workspace }}/.cache/release-notes-memory.db
+        key: release-notes-memory-${{ github.repository }}-${{ github.run_id }}
