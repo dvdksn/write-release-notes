@@ -1,46 +1,59 @@
 # Write Release Notes
 
-A GitHub Action that uses an AI agent to accumulate release notes from
-merged pull requests into a Markdown file.
-
-The action runs on a schedule (or manually), reads the existing release
-notes file, identifies merged PRs not yet documented, and uses
-[cagent](https://github.com/docker/cagent) to categorize and add them.
-You commit the result in a subsequent step.
+A GitHub Action that uses an AI agent to maintain a continuously
+updated release notes document. It runs on a schedule (or manually),
+looks through merged PRs since a baseline version, and adds or updates
+entries in a Markdown file. The document combines agent-generated and
+human-written content — you can edit it between runs and the agent
+will respect your changes.
 
 ## Quick start
 
-```yaml
-name: Update release notes
-on:
-  schedule:
-    - cron: "0 9 * * 1" # Weekly on Monday
-  workflow_dispatch:
+1. Create a release notes file (e.g. `release-notes/next.md`) with a
+   `since` baseline in the front matter:
 
-permissions:
-  contents: write
-  pull-requests: read
+   ```markdown
+   ---
+   since: v1.2.0
+   ---
+   ```
 
-jobs:
-  update-notes:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+2. Add a workflow:
 
-      - uses: dvdksn/write-release-notes@main
-        id: release-notes
-        with:
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          team-members: "alice,bob,charlie"
+   ```yaml
+   name: Update release notes
+   on:
+     schedule:
+       - cron: "0 9 * * *" # Nightly
+     workflow_dispatch:
 
-      - name: Commit changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add ${{ steps.release-notes.outputs.output-file }}
-          git diff --staged --quiet || git commit -m "Update release notes"
-          git push
-```
+   permissions:
+     contents: write
+     pull-requests: read
+
+   jobs:
+     update-notes:
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v4
+
+         - uses: dvdksn/write-release-notes@main
+           id: release-notes
+           with:
+             anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+             team-members: "alice,bob,charlie"
+
+         - name: Commit changes
+           run: |
+             git config user.name "github-actions[bot]"
+             git config user.email "github-actions[bot]@users.noreply.github.com"
+             git add ${{ steps.release-notes.outputs.output-file }}
+             git diff --staged --quiet || git commit -m "Update release notes"
+             git push
+   ```
+
+3. When you cut a release, archive `next.md` (rename it, move it,
+   etc.) and create a fresh one with the new baseline tag.
 
 ## Inputs
 
