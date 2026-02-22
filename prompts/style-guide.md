@@ -2,6 +2,21 @@
 
 Follow these conventions when writing and updating release notes.
 
+## Front matter
+
+The release notes file may begin with YAML front matter that defines
+the scope of the document:
+
+```markdown
+---
+since: v1.2.0
+---
+```
+
+The `since` field specifies a git tag, commit SHA, or date. Only PRs
+merged after this baseline should be included. Preserve the front
+matter when updating the file.
+
 ## File structure
 
 Use level-2 headings (`##`) for sections. Organize entries under the

@@ -15,28 +15,61 @@ agents:
 
       Your context includes:
       - A style guide defining the format and conventions to follow
-      - A list of candidate merged PRs (JSON) to consider adding
       - A prompt with configuration (output file path, repo URL,
         contributor settings, excluded labels)
 
       ## Steps
 
       1. Read the existing release notes file at the output path
-         specified in the prompt (it may not exist yet — that's fine)
-      2. Review the candidate PRs from your context
-      3. For each candidate PR, decide what to do:
+         specified in the prompt. It may not exist yet — that's fine,
+         you'll create it.
+
+      2. Determine the baseline. The release notes file may contain
+         YAML front matter with a `since` field specifying a git tag,
+         commit SHA, or date:
+
+         ```
+         ---
+         since: v1.2.0
+         ---
+         ```
+
+         If `since` is a tag or commit, resolve it to a date:
+         ```
+         gh api repos/{owner}/{repo}/git/ref/tags/{tag} \
+           --jq .object.sha
+         gh api repos/{owner}/{repo}/commits/{sha} \
+           --jq .commit.committer.date
+         ```
+
+         If there's no front matter, look at the most recent entry in
+         the file to infer how far back to go. If the file doesn't
+         exist, fetch a reasonable set of recent merged PRs.
+
+      3. Fetch merged PRs since the baseline:
+         ```
+         gh pr list --repo {owner}/{repo} --state merged \
+           --search "merged:>={date}" \
+           --json number,title,body,labels,author,mergedAt \
+           --limit 100
+         ```
+
+      4. For each PR, decide what to do:
          - If it's not yet documented, add an entry
-         - If it's already documented but the PR updates or supersedes
-           an existing entry, revise the entry
+         - If it's already documented but a newer PR updates or
+           supersedes it, revise the entry
          - If a documented PR has been reverted (by another PR in the
-           candidates), remove the original entry
+           list), remove the original entry
          - Skip PRs whose labels match the excluded labels list
-      4. A PR is documented if its number appears anywhere in the
-         existing file (e.g. #123 or in a URL like /pull/123)
+
+         A PR is documented if its number appears anywhere in the
+         existing file (e.g. #123 or in a URL like /pull/123).
+
       5. If a PR title and body are too vague to write a good entry,
          use `gh pr view <number>` or `gh pr diff <number>` to get
-         more context
-      6. Write the complete updated file
+         more context.
+
+      6. Write the complete updated file, preserving the front matter.
 
       ## Rules
 
@@ -45,6 +78,8 @@ agents:
         were clearly edited by a person unless a PR directly
         invalidates them
       - Create new sections as needed, but don't leave empty sections
+      - Preserve the YAML front matter (including `since`) when
+        writing the updated file
       - Ensure the parent directory exists before writing
     toolsets:
       - type: filesystem

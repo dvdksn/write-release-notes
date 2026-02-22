@@ -44,22 +44,21 @@ jobs:
 
 ## Inputs
 
-| Input                    | Default                       | Description                                         |
-| ------------------------ | ----------------------------- | --------------------------------------------------- |
-| `output-file`            | `release-notes/next.md`       | Path to the release notes file                      |
-| `style-guide`            | _(built-in)_                  | Path to a custom style guide file                   |
-| `additional-prompt`      | _(empty)_                     | Extra instructions for the agent                    |
-| `include-contributors`   | `true`                        | Credit external contributors                        |
-| `exclude-labels`         | `skip-release,chore,internal` | Comma-separated labels to skip                      |
-| `team-members`           | _(empty)_                     | Comma-separated GitHub usernames (not credited)     |
-| `pr-limit`               | `100`                         | Max merged PRs to fetch                             |
-| `anthropic-api-key`      |                               | Anthropic API key                                   |
-| `openai-api-key`         |                               | OpenAI API key                                      |
-| `google-api-key`         |                               | Google AI API key                                   |
-| `github-token`           | `github.token`                | GitHub token                                        |
-| `model`                  | _(agent default)_             | Model override (e.g. `anthropic/claude-sonnet-4-6`) |
-| `cagent-version`         | `v1.23.4`                     | cagent version                                      |
-| `add-prompt-files`       | _(empty)_                     | Additional prompt files (comma-separated)           |
+| Input                  | Default                       | Description                                     |
+| ---------------------- | ----------------------------- | ----------------------------------------------- |
+| `output-file`          | `release-notes/next.md`       | Path to the release notes file                  |
+| `style-guide`          | _(built-in)_                  | Path to a custom style guide file               |
+| `additional-prompt`    | _(empty)_                     | Extra instructions for the agent                |
+| `include-contributors` | `true`                        | Credit external contributors                    |
+| `exclude-labels`       | `skip-release,chore,internal` | Comma-separated labels to skip                  |
+| `team-members`         | _(empty)_                     | Comma-separated GitHub usernames (not credited) |
+| `anthropic-api-key`    |                               | Anthropic API key                               |
+| `openai-api-key`       |                               | OpenAI API key                                  |
+| `google-api-key`       |                               | Google AI API key                               |
+| `github-token`         | `github.token`                | GitHub token                                    |
+| `model`                | _(agent default)_             | Model override (e.g. `anthropic/claude-sonnet-4-6`) |
+| `cagent-version`       | `v1.23.4`                     | cagent version                                  |
+| `add-prompt-files`     | _(empty)_                     | Additional prompt files (comma-separated)       |
 
 ## Outputs
 
@@ -67,13 +66,28 @@ jobs:
 | ------------- | -------------------------------------- |
 | `exit-code`   | cagent exit code                       |
 | `output-file` | Path to the updated release notes file |
-| `prs-added`   | Number of candidate PRs passed to the agent |
+
+## Baseline (`since` front matter)
+
+The release notes file uses YAML front matter to define its scope:
+
+```markdown
+---
+since: v1.2.0
+---
+```
+
+The `since` field can be a git tag, commit SHA, or date. The agent
+fetches merged PRs after this baseline and only documents those.
+
+If there's no front matter, the agent infers how far back to go from
+the existing content, or fetches a reasonable set of recent PRs.
 
 ## Custom style guide
 
 By default, the action uses a built-in style guide that organizes
-entries into **What's new**, **Improvements**, **Bug fixes**, and
-**Breaking changes** sections.
+entries into **Breaking changes**, **What's new**, **Improvements**,
+and **Bug fixes** sections.
 
 To customize the format, create your own style guide and pass its path:
 
@@ -97,14 +111,18 @@ At least one AI provider API key is required (`anthropic-api-key`,
 
 ## How it works
 
-1. Fetches recently merged PRs via `gh pr list`
-2. If there are candidates, runs a cagent agent that:
-   - Reads the existing release notes file
-   - Determines which PRs are already documented
-   - Skips PRs with excluded labels
-   - Categorizes new PRs and adds them to the appropriate sections
-   - Uses `gh` to research PRs when more context is needed
-   - Writes the updated file
+The action runs a [cagent](https://github.com/docker/cagent) agent
+that:
+
+1. Reads the existing release notes file (if any)
+2. Determines the baseline from the `since` front matter
+3. Fetches merged PRs since the baseline via `gh`
+4. Determines which PRs are already documented
+5. Skips PRs with excluded labels
+6. Categorizes new PRs and adds them to the appropriate sections
+7. Revises or removes entries when PRs are updated or reverted
+8. Uses `gh pr view` / `gh pr diff` to research PRs when needed
+9. Writes the updated file
 
 The action does **not** commit or push. Add a commit step after the
 action (see the quick start example).
