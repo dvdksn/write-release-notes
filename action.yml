@@ -1,0 +1,174 @@
+name: Write Release Notes
+description: >-
+  Uses an AI agent to accumulate release notes from merged PRs into a
+  release notes file.
+
+inputs:
+  output-file:
+    description: Path to the release notes file (read and written by the agent)
+    required: false
+    default: release-notes/next.md
+  style-guide:
+    description: Path to a custom style guide file (overrides the built-in default)
+    required: false
+    default: ""
+  additional-prompt:
+    description: Extra instructions appended to the agent prompt
+    required: false
+    default: ""
+  include-contributors:
+    description: Whether to credit external contributors
+    required: false
+    default: "true"
+  exclude-labels:
+    description: Comma-separated list of PR labels to skip
+    required: false
+    default: skip-release,chore,internal
+  team-members:
+    description: >-
+      Comma-separated GitHub usernames considered team members (not credited
+      as external contributors)
+    required: false
+    default: ""
+  pr-limit:
+    description: Maximum number of merged PRs to fetch
+    required: false
+    default: "100"
+  anthropic-api-key:
+    description: Anthropic API key
+    required: false
+    default: ""
+  openai-api-key:
+    description: OpenAI API key
+    required: false
+    default: ""
+  google-api-key:
+    description: Google AI API key
+    required: false
+    default: ""
+  github-token:
+    description: GitHub token for API access (defaults to github.token)
+    required: false
+    default: ""
+  model:
+    description: Model override (e.g. anthropic/claude-sonnet-4-5)
+    required: false
+    default: ""
+  cagent-version:
+    description: cagent version to use
+    required: false
+    default: v1.23.4
+  add-prompt-files:
+    description: Comma-separated list of additional prompt files
+    required: false
+    default: ""
+
+outputs:
+  exit-code:
+    description: cagent exit code
+    value: ${{ steps.run-agent.outputs.exit-code }}
+  output-file:
+    description: Path to the updated release notes file
+    value: ${{ inputs.output-file }}
+  prs-added:
+    description: Number of candidate PRs passed to the agent
+    value: ${{ steps.prepare-context.outputs.pr-count }}
+
+runs:
+  using: composite
+  steps:
+    # --- Resolve GitHub token ---
+    - name: Resolve GitHub token
+      id: resolve-token
+      shell: bash
+      run: |
+        if [[ -n "${{ inputs.github-token }}" ]]; then
+          echo "token=${{ inputs.github-token }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "token=${{ github.token }}" >> "$GITHUB_OUTPUT"
+        fi
+
+    # --- Fetch merged PRs and prepare context ---
+    - name: Fetch merged PRs
+      id: fetch-prs
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.resolve-token.outputs.token }}
+        PR_LIMIT: ${{ inputs.pr-limit }}
+      run: |
+        gh pr list \
+          --repo "$GITHUB_REPOSITORY" \
+          --state merged \
+          --json number,title,body,labels,author,mergedAt \
+          --limit "$PR_LIMIT" \
+          > /tmp/prs.json
+
+    - name: Prepare context
+      id: prepare-context
+      shell: bash
+      env:
+        CUSTOM_STYLE_GUIDE: ${{ inputs.style-guide }}
+        ACTION_PATH: ${{ github.action_path }}
+        USER_PROMPT_FILES: ${{ inputs.add-prompt-files }}
+      run: |
+        # Check PR count for early exit
+        PR_COUNT=$(jq length /tmp/prs.json)
+        echo "pr-count=${PR_COUNT}" >> "$GITHUB_OUTPUT"
+
+        if [[ "$PR_COUNT" == "0" ]]; then
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          echo "No merged PRs found. Skipping agent run."
+          exit 0
+        fi
+        echo "skip=false" >> "$GITHUB_OUTPUT"
+        echo "Found ${PR_COUNT} candidate PRs"
+
+        # Wrap PR data in a context file
+        {
+          echo "# Candidate merged PRs"
+          echo ""
+          echo "These are recently merged PRs. Some may already be"
+          echo "documented in the release notes — skip those. Also skip"
+          echo "PRs with excluded labels (see the prompt for the list)."
+          echo ""
+          cat /tmp/prs.json
+        } > /tmp/pr-context.md
+
+        # Resolve style guide path
+        if [[ -n "$CUSTOM_STYLE_GUIDE" && -f "$CUSTOM_STYLE_GUIDE" ]]; then
+          STYLE_GUIDE="$CUSTOM_STYLE_GUIDE"
+        else
+          STYLE_GUIDE="${ACTION_PATH}/prompts/style-guide.md"
+        fi
+
+        # Build prompt-files list
+        FILES="/tmp/pr-context.md,${STYLE_GUIDE}"
+        if [[ -n "$USER_PROMPT_FILES" ]]; then
+          FILES="${FILES},${USER_PROMPT_FILES}"
+        fi
+        echo "prompt-files=${FILES}" >> "$GITHUB_OUTPUT"
+
+    # --- Run cagent ---
+    - name: Run cagent
+      id: run-agent
+      if: steps.prepare-context.outputs.skip != 'true'
+      uses: docker/cagent-action@latest
+      with:
+        agent: ${{ github.action_path }}/agents/release-notes.yaml
+        prompt: |
+          Update the release notes file at `${{ inputs.output-file }}`.
+
+          Repository: ${{ github.server_url }}/${{ github.repository }}
+          Include contributors: ${{ inputs.include-contributors }}
+          Team members: ${{ inputs.team-members }}
+          Exclude labels: ${{ inputs.exclude-labels }}
+
+          ${{ inputs.additional-prompt }}
+        add-prompt-files: ${{ steps.prepare-context.outputs.prompt-files }}
+        anthropic-api-key: ${{ inputs.anthropic-api-key }}
+        openai-api-key: ${{ inputs.openai-api-key }}
+        google-api-key: ${{ inputs.google-api-key }}
+        github-token: ${{ steps.resolve-token.outputs.token }}
+        model: ${{ inputs.model }}
+        cagent-version: ${{ inputs.cagent-version }}
+        yolo: true
