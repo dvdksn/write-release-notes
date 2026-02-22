@@ -18,7 +18,11 @@ will respect your changes.
    ---
    ```
 
-2. Add a workflow:
+   The `since` field tells the agent where to start looking for merged
+   PRs. It can be a Git tag, commit SHA, or date. See
+   [Baseline](#baseline-since-front-matter) for details.
+
+2. Add a workflow to keep the release notes up to date:
 
    ```yaml
    name: Update release notes
@@ -52,26 +56,60 @@ will respect your changes.
              git push
    ```
 
-3. When you cut a release, archive `next.md` (rename it, move it,
-   etc.) and create a fresh one with the new baseline tag.
+3. As PRs merge, the action keeps `next.md` up to date. When you're
+   ready to release, see [Cutting a release](#cutting-a-release).
+
+## Release lifecycle
+
+### During development
+
+The action runs on a schedule (or manually) and accumulates entries in
+`release-notes/next.md`. You can edit the file between runs — the
+agent respects your changes and won't re-add entries you've removed.
+
+The file always has a `since` baseline in its front matter. Because the
+configuration lives in the file itself, the workflow is idempotent:
+anyone can re-run it at any time and get the same result.
+
+### Cutting a release
+
+When you're ready to release, snapshot `next.md` and rotate the file
+for the next cycle. However you handle releases today, the key steps
+are:
+
+1. **Use** the content of `next.md` for your release description
+   (strip the front matter first)
+2. **Archive** `next.md` — rename it to match the version
+   (e.g. `v1.3.0.md`) so you keep a history
+3. **Create** a new `next.md` with `since` set to the new tag
+
+After a release, your directory might look like:
+
+```
+release-notes/
+├── next.md        # since: v1.3.0 (fresh, for the next cycle)
+├── v1.3.0.md      # Archived release notes
+├── v1.2.0.md      # Previous release
+└── ...
+```
 
 ## Inputs
 
-| Input                  | Default                       | Description                                     |
-| ---------------------- | ----------------------------- | ----------------------------------------------- |
-| `output-file`          | `release-notes/next.md`       | Path to the release notes file                  |
-| `style-guide`          | _(built-in)_                  | Path to a custom style guide file               |
-| `additional-prompt`    | _(empty)_                     | Extra instructions for the agent                |
-| `include-contributors` | `true`                        | Credit external contributors                    |
-| `exclude-labels`       | `skip-release,chore,internal` | Comma-separated labels to skip                  |
-| `team-members`         | _(empty)_                     | Comma-separated GitHub usernames (not credited) |
-| `anthropic-api-key`    |                               | Anthropic API key                               |
-| `openai-api-key`       |                               | OpenAI API key                                  |
-| `google-api-key`       |                               | Google AI API key                               |
-| `github-token`         | `github.token`                | GitHub token                                    |
+| Input                  | Default                       | Description                                         |
+| ---------------------- | ----------------------------- | --------------------------------------------------- |
+| `output-file`          | `release-notes/next.md`       | Path to the release notes file                      |
+| `style-guide`          | _(built-in)_                  | Path to a custom style guide file                   |
+| `additional-prompt`    | _(empty)_                     | Extra instructions for the agent                    |
+| `include-contributors` | `true`                        | Credit external contributors                        |
+| `exclude-labels`       | `skip-release,chore,internal` | Comma-separated labels to skip                      |
+| `team-members`         | _(empty)_                     | Comma-separated GitHub usernames (not credited)     |
+| `anthropic-api-key`    |                               | Anthropic API key                                   |
+| `openai-api-key`       |                               | OpenAI API key                                      |
+| `google-api-key`       |                               | Google AI API key                                   |
+| `github-token`         | `github.token`                | GitHub token                                        |
 | `model`                | _(agent default)_             | Model override (e.g. `anthropic/claude-sonnet-4-6`) |
-| `cagent-version`       | `v1.23.4`                     | cagent version                                  |
-| `add-prompt-files`     | _(empty)_                     | Additional prompt files (comma-separated)       |
+| `cagent-version`       | `v1.23.4`                     | cagent version                                      |
+| `add-prompt-files`     | _(empty)_                     | Additional prompt files (comma-separated)           |
 
 ## Outputs
 
@@ -90,7 +128,7 @@ since: v1.2.0
 ---
 ```
 
-The `since` field can be a git tag, commit SHA, or date. The agent
+The `since` field can be a Git tag, commit SHA, or date. The agent
 fetches merged PRs after this baseline and only documents those.
 
 If there's no front matter, the agent infers how far back to go from
