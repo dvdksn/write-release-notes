@@ -116,6 +116,8 @@ already exists, merge new names into the existing list.
 - API changes, even if internal, when they affect integrations.
 - Performance improvements with measurable impact.
 - Breaking changes, always.
+- When the changelog is scoped to a specific component, focus on
+  changes relevant to that component and write from its perspective.
 
 ## What to omit
 

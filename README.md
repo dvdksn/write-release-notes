@@ -102,6 +102,8 @@ release-notes/
 | `additional-prompt`    | _(empty)_                     | Extra instructions for the agent                    |
 | `include-contributors` | `true`                        | Credit external contributors                        |
 | `exclude-labels`       | `skip-release,chore,internal` | Comma-separated labels to skip                      |
+| `include-labels`       | _(empty)_                     | Comma-separated labels to include (OR logic)        |
+| `scope`                | _(empty)_                     | Description of what this changelog covers            |
 | `team-members`         | _(empty)_                     | Comma-separated GitHub usernames (not credited)     |
 | `anthropic-api-key`    |                               | Anthropic API key                                   |
 | `openai-api-key`       |                               | OpenAI API key                                      |
@@ -151,6 +153,83 @@ To customize the format, create your own style guide and pass its path:
 
 See [`prompts/style-guide.md`](prompts/style-guide.md) for the default
 style guide.
+
+## Multi-project / monorepo usage
+
+For monorepos with multiple components that need independent changelogs,
+invoke the action once per component. Each invocation gets its own output
+file, label filter, and scope.
+
+Two inputs enable this:
+
+- **`include-labels`** filters PRs by label (OR logic). Only PRs with at
+  least one matching label are included.
+- **`scope`** tells the agent what this changelog covers, helping it make
+  judgment calls on borderline PRs and write entries from the component's
+  perspective.
+
+These can be used independently or together.
+
+```yaml
+name: Update release notes
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  buildkit-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dvdksn/write-release-notes@main
+        id: release-notes
+        with:
+          output-file: release-notes/buildkit/next.md
+          include-labels: area/buildkitd,area/solver,area/executor
+          scope: "BuildKit core engine (daemon, solver, executor, workers)"
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ${{ steps.release-notes.outputs.output-file }}
+          git diff --staged --quiet || git commit -m "Update buildkit release notes"
+          git push
+
+  dockerfile-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dvdksn/write-release-notes@main
+        id: release-notes
+        with:
+          output-file: release-notes/dockerfile/next.md
+          include-labels: area/dockerfile,area/frontend
+          scope: "Dockerfile frontend syntax and features"
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ${{ steps.release-notes.outputs.output-file }}
+          git diff --staged --quiet || git commit -m "Update dockerfile release notes"
+          git push
+```
+
+**Notes:**
+
+- PRs matching multiple components appear in all relevant changelogs.
+  The `scope` helps the agent write component-appropriate entries for
+  the same PR.
+- Agent memory is scoped per output file, so human edits to one
+  changelog don't affect another component's memory.
+- Each component has its own `since` baseline in its output file, so
+  version cycles are fully independent.
 
 ## Authentication
 

@@ -16,7 +16,7 @@ agents:
       Your context includes:
       - A style guide defining the format and conventions to follow
       - A prompt with configuration (output file path, repo URL,
-        contributor settings, excluded labels)
+        contributor settings, excluded labels, include labels, scope)
 
       ## Steps
 
@@ -66,6 +66,8 @@ agents:
          - If a documented PR has been reverted (by another PR in the
            list), remove the original entry
          - Skip PRs whose labels match the excluded labels list
+         - If "Include labels" is set in the prompt, skip PRs that don't
+           have at least one of the listed labels
 
          A PR is documented if its number appears anywhere in the
          existing file (e.g. #123 or in a URL like /pull/123).
@@ -92,6 +94,20 @@ agents:
       - Preserve the YAML front matter (including `since`) when
         writing the updated file
       - Ensure the parent directory exists before writing
+
+      ## Scoped mode
+
+      If the prompt includes a non-empty "Scope" value, this changelog
+      covers a specific component of the repository:
+
+      - The scope describes what this changelog is about. Use it to frame
+        entries from that component's perspective.
+      - If "Include labels" is also set, the PR list is further filtered
+        to relevant PRs. Trust the filter — focus on writing good entries.
+      - If a filtered PR seems genuinely unrelated to the scope (e.g.
+        mislabeled), you may skip it.
+      - When the same PR could be described differently for different
+        components, write the entry from this component's perspective.
     toolsets:
       - type: filesystem
       - type: shell

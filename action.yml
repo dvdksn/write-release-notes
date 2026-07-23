@@ -24,6 +24,19 @@ inputs:
     description: Comma-separated list of PR labels to skip
     required: false
     default: skip-release,chore,internal
+  include-labels:
+    description: >-
+      Comma-separated list of PR labels to include (OR logic). Only PRs
+      with at least one matching label are considered. Leave empty to
+      consider all PRs. Useful for monorepo setups.
+    required: false
+    default: ""
+  scope:
+    description: >-
+      Description of what this changelog covers. Helps the agent decide
+      which PRs belong and write entries from this component's perspective.
+    required: false
+    default: ""
   team-members:
     description: >-
       Comma-separated GitHub usernames considered team members (not credited
@@ -99,12 +112,22 @@ runs:
         fi
         echo "prompt-files=${FILES}" >> "$GITHUB_OUTPUT"
 
+    - name: Compute cache key
+      id: cache-key
+      shell: bash
+      env:
+        OUTPUT_FILE: ${{ inputs.output-file }}
+      run: |
+        SLUG=$(echo "$OUTPUT_FILE" | tr '/.' '-' | sed 's/[^a-zA-Z0-9-]//g')
+        echo "slug=${SLUG}" >> "$GITHUB_OUTPUT"
+
     - name: Restore agent memory
       uses: actions/cache/restore@v4
       with:
         path: ${{ github.workspace }}/.cache/release-notes-memory.db
-        key: release-notes-memory-${{ github.repository }}-${{ github.run_id }}
+        key: release-notes-memory-${{ github.repository }}-${{ steps.cache-key.outputs.slug }}-${{ github.run_id }}
         restore-keys: |
+          release-notes-memory-${{ github.repository }}-${{ steps.cache-key.outputs.slug }}-
           release-notes-memory-${{ github.repository }}-
 
     - name: Run cagent
@@ -119,6 +142,8 @@ runs:
           Include contributors: ${{ inputs.include-contributors }}
           Team members: ${{ inputs.team-members }}
           Exclude labels: ${{ inputs.exclude-labels }}
+          Include labels: ${{ inputs.include-labels }}
+          Scope: ${{ inputs.scope }}
 
           ${{ inputs.additional-prompt }}
         add-prompt-files: ${{ steps.resolve-style-guide.outputs.prompt-files }}
@@ -136,4 +161,4 @@ runs:
       uses: actions/cache/save@v4
       with:
         path: ${{ github.workspace }}/.cache/release-notes-memory.db
-        key: release-notes-memory-${{ github.repository }}-${{ github.run_id }}
+        key: release-notes-memory-${{ github.repository }}-${{ steps.cache-key.outputs.slug }}-${{ github.run_id }}
